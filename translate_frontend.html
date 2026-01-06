@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Cloud 专业版本地翻译工具</title>
+
+    <!-- 引入外部 CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<!-- 顶部进度条 -->
+<div id="progressBarContainer">
+    <div id="progressBar"></div>
+</div>
+
+<div class="container">
+
+    <h2>Cloud 专业版本地翻译工具</h2>
+
+    <!-- 语言选择 -->
+    <div class="row" style="flex-wrap: wrap; gap: 15px;">
+
+        <label>源语言：</label>
+        <select id="sourceLang"></select>
+
+        <label style="display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="autoDetectCheckbox" checked>
+            自动检测
+        </label>
+
+        <label id="detectedLabel" style="color:#666;">自动检测：未开始</label>
+
+        <label style="margin-left:20px;">目标语言：</label>
+        <select id="targetLang"></select>
+
+        <button id="swapBtn">互换</button>
+    </div>
+    <h3>高级翻译参数（可选）</h3>
+    <div id="advancedParams" class="row" style="flex-wrap: wrap; gap: 20px;">
+
+        <label class="tooltip">
+            Beam 数：
+            <input type="number" id="gen_num_beams" min="1" max="10" value="1" style="width:60px;">
+            <span class="tooltiptext">控制搜索宽度。数值越大翻译越自然，但速度更慢。</span>
+        </label>
+
+        <label class="tooltip">
+            重复惩罚：
+            <input type="number" id="gen_repetition_penalty" step="0.1" min="1.0" max="3.0" value="1.1" style="width:60px;">
+            <span class="tooltiptext">提高此值可减少重复句子或词语。</span>
+        </label>
+
+        <label class="tooltip">
+            no_repeat_ngram：
+            <input type="number" id="gen_no_repeat_ngram" min="0" max="10" value="3" style="width:60px;">
+            <span class="tooltiptext">禁止模型重复 n-gram（例如 3 表示禁止重复 3 个词的组合）。</span>
+        </label>
+
+        <label class="tooltip">
+            encoder_no_repeat_ngram：
+            <input type="number" id="gen_encoder_no_repeat_ngram" min="0" max="10" value="3" style="width:60px;">
+            <span class="tooltiptext">避免模型重复输入中的 n-gram，适用于技术文档。</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="autoTuneCheckbox" checked>
+            自动调优（推荐）
+        </label>
+    </div>
+
+
+    <h3>输入文本</h3>
+    <textarea id="inputText" placeholder="在此输入需要翻译的文本..."></textarea>
+
+    <h3>
+        翻译结果
+        <span id="costTimeLabel" style="font-weight: normal; font-size: 0.9em; color: #666;"></span>
+    </h3>
+    <textarea id="resultText" placeholder="翻译结果将显示在此处..."></textarea>
+
+    <div id="markdownView"></div>
+
+    <div class="row">
+        <button onclick="triggerTranslate()">手动翻译</button>
+        <button id="copyBtn">复制</button>
+
+        <label style="display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="markdownMode">
+            Markdown 预览
+        </label>
+    </div>
+
+    <h3>文件翻译</h3>
+    <div class="row">
+        <input type="file" id="fileInput">
+        <button id="translateFileBtn">翻译文件</button>
+    </div>
+
+    <div class="row">
+        <button id="exportMdBtn">导出 Markdown</button>
+        <button id="exportWordBtn">导出 Word</button>
+        <button id="exportPdfBtn">导出 PDF</button>
+    </div>
+
+    <h3>
+        翻译历史
+        <button id="clearHistoryBtn" style="margin-left: 10px;">清空历史</button>
+    </h3>
+    <div id="history"></div>
+
+
+</div>
+
+<!-- 引入 translate.js -->
+<script src="translate.js"></script>
+
+<!-- 初始化语言下拉框 -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    if (typeof fillLanguageSelect === "function") {
+        fillLanguageSelect("sourceLang");
+        fillLanguageSelect("targetLang");
+        document.getElementById("sourceLang").value = "en";
+        document.getElementById("targetLang").value = "zh";
+    }
+    // ⭐ 绑定清空历史按钮
+    const clearBtn = document.getElementById("clearHistoryBtn");
+    if (clearBtn) {
+        clearBtn.onclick = clearHistory;
+    }
+    updateAdvancedParamsUI();
+});
+</script>
+
+</body>
+</html>

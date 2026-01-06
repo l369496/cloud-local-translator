@@ -1,0 +1,153 @@
+body {
+    font-family: "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f5f6fa;
+}
+
+#progressBarContainer {
+    width: 100%;
+    height: 4px;
+    background: #ddd;
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 2000;
+}
+
+#progressBar {
+    width: 0%;
+    height: 100%;
+    background: #4a90e2;
+    transition: width 0.2s ease-out;
+}
+
+.container {
+    width: 90%;
+    max-width: 1200px;
+    margin: 60px auto;
+}
+
+textarea {
+    width: 100%;
+    height: 200px;
+    padding: 12px;
+    font-size: 15px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
+    gap: 10px;
+}
+
+select {
+    padding: 6px 10px;
+    font-size: 14px;
+}
+
+button {
+    padding: 8px 16px;
+    font-size: 14px;
+    background: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #357ab8;
+}
+
+#markdownView {
+    display: none;
+    border: 1px solid #ccc;
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    min-height: 200px;
+}
+
+/* 历史记录 */
+#history {
+    margin-top: 20px;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.history-item {
+    padding: 6px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+}
+
+.history-item:hover {
+    background: #f0f0f0;
+}
+
+/* Tooltip 容器 */
+.tooltip {
+    position: relative;
+    display: inline-block;
+}
+
+/* Tooltip 文本 */
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 220px;
+    background-color: #333;
+    color: #fff;
+    text-align: left;
+    border-radius: 6px;
+    padding: 8px;
+    position: absolute;
+    z-index: 10;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.25s;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+/* Tooltip 箭头 */
+.tooltip .tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -6px;
+    border-width: 6px;
+    border-style: solid;
+    border-color: #333 transparent transparent transparent;
+}
+
+/* 鼠标悬停显示 Tooltip */
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* 自动调优禁用状态 */
+.adv-disabled input[type="number"] {
+    background: #eee;
+    color: #888;
+    cursor: not-allowed;
+    border-color: #ccc;
+}
+
+.adv-disabled label {
+    opacity: 0.6;
+}
