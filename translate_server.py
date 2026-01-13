@@ -18,6 +18,7 @@ import platform
 
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from langdetect import detect, DetectorFactory
 from queue import Queue
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
@@ -202,6 +203,12 @@ def translate_paragraph(text: str, source_lang: str, target_lang: str, generate_
         # 合并前端参数
         params = {**default_params, **generate_params}
 
+        # ⭐ 强制转换为 int（避免 float 导致 repeat_interleave 崩溃）
+        int_fields = ["num_beams", "no_repeat_ngram_size", "encoder_no_repeat_ngram_size"]
+        for f in int_fields:
+            if f in params:
+                params[f] = int(params[f])
+
         generated = model.generate(
             **inputs,
             max_length=max_len,
@@ -292,13 +299,22 @@ def translate_text_with_progress(text: str, source_lang: str, target_lang: str, 
 
     # 3. 翻译每个 chunk
     translated_chunks = []
+    task = tasks.get(task_id)
+    task["last_poll"] = time.time()
     for idx, chunk in enumerate(chunks, start=1):
-        task = tasks.get(task_id)
+        if time.time() - task["last_poll"] > 10:
+            task["status"] = "cancelled"
+            break
+
         if not task or task.get("status") == "cancelled":
             break
 
         if chunk.strip():
-            translated = translate_paragraph(chunk, source_lang, target_lang, task.get("generate", {}))
+            source = source_lang;
+            if not source:
+                source = normalize_lang(detect(chunk))
+                task["source"] = source
+            translated = translate_paragraph(chunk, source, target_lang, task.get("generate", {}))
         else:
             translated = ""  # 空行保持空行
 
@@ -321,6 +337,26 @@ def translate_text_with_progress(text: str, source_lang: str, target_lang: str, 
 # ============================================================
 # 异步任务接口
 # ============================================================
+class DetectRequest(BaseModel): text: str
+
+# 语言映射（关键修复点）
+def normalize_lang(lang: str):
+    lang = lang.lower()
+    if lang.startswith("zh"):
+        return "zh"
+    if lang.startswith("en"):
+        return "en"
+    return lang
+
+@app.post("/detect")
+def detect_lang(req: DetectRequest):
+    try:
+        lang = detect(req.text)
+        lang = normalize_lang(lang)
+        return {"lang": lang, "prob": 1.0}
+    except:
+        return {"lang": "en", "prob": 0.0}
+
 class TranslateRequest(BaseModel):
     text: str
     source: Optional[str] = None
@@ -373,7 +409,7 @@ def start_next_task():
 
 @app.post("/translate_async")
 async def translate_async(req: TranslateRequest):
-    source_lang = req.source or "en"
+    source_lang = req.source
     target_lang = req.target
 
     task_id = str(uuid.uuid4())
@@ -406,6 +442,8 @@ async def get_progress(task_id: str):
     if not task:
         return {"progress": 0, "status": "not_found", "total_sentences": None}
 
+    task["last_poll"] = time.time()
+
     return {
         "progress": task.get("progress", 0),
         "status": task.get("status", "queued"),
@@ -417,7 +455,12 @@ async def get_result(task_id: str):
     task = tasks.get(task_id)
     if not task:
         return {"status": "not_found", "result": None}
-    return {"status": task.get("status", "running"), "result": task.get("result")}
+    return {
+        "status": task.get("status", "running"),
+        "source": task.get("source", 'en'), 
+        "result": task.get("result"), 
+        "error": task.get("error")
+    }
 
 @app.post("/cancel/{task_id}")
 async def cancel_task(task_id: str):
@@ -438,14 +481,13 @@ async def cancel_task(task_id: str):
 # 文件翻译 + 导出
 # ============================================================
 @app.post("/translate_file_async")
-async def translate_file_async(file: UploadFile = File(...), target: str = "zh"):
+async def translate_file_async(file: UploadFile = File(...), source: str = None, target: str = "zh"):
     content = await file.read()
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError:
         text = content.decode("latin-1")
 
-    source_lang = "en"
     task_id = str(uuid.uuid4())
 
     async with tasks_lock:
@@ -453,7 +495,7 @@ async def translate_file_async(file: UploadFile = File(...), target: str = "zh")
             "status": "queued",
             "progress": 0,
             "result": None,
-            "source": source_lang,
+            "source": source,
             "target": target,
             "created_at": time.time()
         }
@@ -461,7 +503,7 @@ async def translate_file_async(file: UploadFile = File(...), target: str = "zh")
     task_queue.put({
         "task_id": task_id,
         "text": text,
-        "source": source_lang,
+        "source": source,
         "target": target
     })
 

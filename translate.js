@@ -452,11 +452,40 @@ TranslationManager.prototype.startProgressPolling = function (taskId, job) {
             const resultRes = await fetch(API_BASE + "/result/" + taskId);
             const resultData = await resultRes.json();
 
+            // ⭐ 如果任务状态为 error，显示错误信息
+            if (resultData.status === "error") {
+                clearInterval(this.progressTimer);
+                this.progressTimer = null;
+
+                const errMsg = resultData.error || "翻译过程中发生未知错误。";
+                resultElem.value = "【翻译失败】\n" + errMsg;
+
+                updateMarkdownView();
+                setProgressVisible(false);
+
+                this.currentTaskId = null;
+                this.currentAbortController = null;
+                this.isRunning = false;
+
+                this.runNext();
+                return;
+            }
+
             if (resultData.status === "done") {
                 clearInterval(this.progressTimer);
                 this.progressTimer = null;
 
                 const translated = resultData.result || "";
+                // ⭐ 根据后端返回的 source 更新源语言选择框
+                if (resultData.source) {
+                    document.getElementById("sourceLang").value = resultData.source;
+                    if (job.autoDetect) {
+                        const sourceSelect = document.getElementById("sourceLang");
+                        const langName = sourceSelect.options[sourceSelect.selectedIndex].text;
+                        detectedLabel.innerText = "检测到：" + langName;
+                    }
+                }
+
                 resultElem.value = translated;
                 updateMarkdownView();
 
@@ -504,13 +533,7 @@ TranslationManager.prototype.startProgressPolling = function (taskId, job) {
 // ============================================================
 TranslationManager.prototype.startTask = async function (job) {
 
-    const ts = () => new Date().toISOString();  // ⭐ 时间戳函数
-
-    console.log(`[${ts()}] === [startTask] 开始启动任务 ===`);
-    console.log(`[${ts()}] job =`, job);
-
     await this.cancelCurrentTask();
-    console.log(`[${ts()}] [startTask] 已取消旧任务`);
     
     this.initialETA = null;
     this.lastProgressTimestamp = null;
@@ -522,10 +545,8 @@ TranslationManager.prototype.startTask = async function (job) {
 
     if (job.autoDetect) {
         detectedLabel.innerText = "自动检测：进行中...";
-        console.log(`[${ts()}] [startTask] 自动检测开启`);
     } else {
         detectedLabel.innerText = "已选择源语言：" + languages[job.manualSource];
-        console.log(`[${ts()}] [startTask] 使用手动源语言 = ${job.manualSource}`);
     }
 
     const controller = new AbortController();
@@ -533,7 +554,6 @@ TranslationManager.prototype.startTask = async function (job) {
 
     // ⭐ JSON 安全处理
     const safeText = job.text.replace(/\u2028|\u2029/g, "");
-    console.log(`[${ts()}] [startTask] safeText 长度 = ${safeText.length}`);
 
     const payload = {
         text: safeText,
@@ -542,11 +562,7 @@ TranslationManager.prototype.startTask = async function (job) {
         generate: getGenerateParams()
     };
 
-    console.log(`[${ts()}] [startTask] payload =`, payload);
-
     try {
-        console.log(`[${ts()}] [startTask] 正在发送 /translate_async 请求…`);
-
         const res = await fetch(API_BASE + "/translate_async", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -554,40 +570,25 @@ TranslationManager.prototype.startTask = async function (job) {
             signal: controller.signal
         });
 
-        console.log(`[${ts()}] [startTask] 后端响应状态 = ${res.status}`);
-
         if (!res.ok) {
-            console.error(`[${ts()}] [startTask] 后端返回错误状态 = ${res.status}`);
             throw new Error("启动翻译任务失败：" + res.status);
         }
 
         const data = await res.json();
-        console.log(`[${ts()}] [startTask] 后端返回 JSON =`, data);
 
         const taskId = data.task_id;
         this.currentTaskId = taskId;
 
-        console.log(`[${ts()}] [startTask] 已获取 taskId = ${taskId}`);
-
         this.startTime = Date.now();
         this.totalSentences = null;
 
-        console.log(`[${ts()}] [startTask] totalSentences = ${this.totalSentences}`);
-
         showLoading(1, this.totalSentences, 0, 0);
-
-        console.log(`[${ts()}] [startTask] 准备启动进度轮询…`);
         this.startProgressPolling(taskId, job);
-
-        console.log(`[${ts()}] === [startTask] 启动任务完成 ===`);
 
     } catch (err) {
         if (err.name === "AbortError") {
-            console.warn(`[${ts()}] [startTask] 请求已被取消（AbortError）`);
             return;
         }
-
-        console.error(`[${ts()}] [startTask] 启动翻译任务错误：`, err);
         setProgressVisible(false);
         this.isRunning = false;
     }
@@ -756,11 +757,24 @@ document.getElementById("translateFileBtn").onclick = async () => {
 
     const resultElem = document.getElementById("resultText");
     resultElem.value = "正在上传文件…";
+    updateMarkdownView();
+
+    // ⭐ 获取语言设置（与 startTask 完全一致）
+    const autoDetectCheckbox = document.getElementById("autoDetectCheckbox");
+    const sourceSelect = document.getElementById("sourceLang");
+    const targetSelect = document.getElementById("targetLang");
+
+    const autoDetect = autoDetectCheckbox ? autoDetectCheckbox.checked : true;
+    const manualSource = sourceSelect.value;
+    const target = targetSelect.value;
 
     try {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("target", document.getElementById("targetLang").value);
+
+        // ⭐ 自动检测 → source=null，否则使用手动选择
+        formData.append("source", autoDetect ? "" : manualSource);
+        formData.append("target", target);
 
         // ⭐ 调用异步文件翻译接口
         const res = await fetch(API_BASE + "/translate_file_async", {
@@ -779,19 +793,19 @@ document.getElementById("translateFileBtn").onclick = async () => {
         // ⭐ 启动进度条
         translationManager.currentTaskId = taskId;
         translationManager.startTime = Date.now();
-        translationManager.totalSentences = null;   // 等后端返回真实句数
+        translationManager.totalSentences = null;
         translationManager.initialETA = null;
         translationManager.lastProgressTimestamp = null;
 
         resultElem.value = "正在翻译文件内容…";
         updateMarkdownView();
 
-        // ⭐ 启动轮询
+        // ⭐ 启动轮询（job 信息与文本翻译一致）
         translationManager.startProgressPolling(taskId, {
-            text: file.name,   // 用文件名作为 job.text
-            autoDetect: false,
-            manualSource: "en",
-            target: document.getElementById("targetLang").value
+            text: file.name,
+            autoDetect,
+            manualSource,
+            target
         });
 
     } catch (err) {
